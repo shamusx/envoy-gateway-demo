@@ -1,0 +1,31 @@
+# ReferenceGrant to allow Team A HTTPRoutes to reference httpbin service
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-team-a-to-httpbin
+  namespace: httpbin
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: team-a
+  to:
+  - group: ""
+    kind: Service
+    name: httpbin
+---
+# ReferenceGrant to allow Team B HTTPRoutes to reference httpbin service
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: ReferenceGrant
+metadata:
+  name: allow-team-b-to-httpbin
+  namespace: httpbin
+spec:
+  from:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    namespace: team-b
+  to:
+  - group: ""
+    kind: Service
+    name: httpbin

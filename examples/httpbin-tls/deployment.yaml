@@ -1,0 +1,102 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: httpbin-tls
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: httpbin-tls
+  namespace: httpbin-tls
+---
+# Certificate for httpbin TLS
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: httpbin-tls-cert
+  namespace: httpbin-tls
+spec:
+  secretName: httpbin-tls-secret
+  issuerRef:
+    name: selfsigned-ca
+    kind: ClusterIssuer
+  commonName: httpbin-tls.httpbin-tls.svc.cluster.local
+  dnsNames:
+  - httpbin-tls
+  - httpbin-tls.httpbin-tls
+  - httpbin-tls.httpbin-tls.svc
+  - httpbin-tls.httpbin-tls.svc.cluster.local
+  - localhost
+---
+# Note: ClusterIssuer 'selfsigned-ca' is created by the setup scripts
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: httpbin-tls
+  namespace: httpbin-tls
+  labels:
+    app: httpbin-tls
+    service: httpbin-tls
+spec:
+  ports:
+  - name: https
+    port: 8443
+    targetPort: 8080
+    protocol: TCP
+  selector:
+    app: httpbin-tls
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: httpbin-tls
+  namespace: httpbin-tls
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: httpbin-tls
+      version: v1
+  template:
+    metadata:
+      labels:
+        app: httpbin-tls
+        version: v1
+    spec:
+      serviceAccountName: httpbin-tls
+      containers:
+      - image: ghcr.io/mccutchen/go-httpbin:latest
+        imagePullPolicy: IfNotPresent
+        name: httpbin-tls
+        ports:
+        - containerPort: 8080
+        env:
+        - name: HTTPS_CERT_FILE
+          value: "/etc/certs/tls.crt"
+        - name: HTTPS_KEY_FILE
+          value: "/etc/certs/tls.key"
+        - name: HTTPS_CLIENT_CA_FILE
+          value: "/etc/certs/ca.crt"
+        volumeMounts:
+        - name: tls-certs
+          mountPath: /etc/certs
+          readOnly: true
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+      volumes:
+      - name: tls-certs
+        secret:
+          secretName: httpbin-tls-secret
+          items:
+          - key: tls.crt
+            path: tls.crt
+          - key: tls.key
+            path: tls.key
+          - key: ca.crt
+            path: ca.crt

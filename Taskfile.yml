@@ -1,0 +1,218 @@
+version: '3'
+
+vars:
+  CLUSTER_NAME: envoygateway-sandbox
+  VERSIONS_FILE: versions.env
+  PORT_FORWARD: 8080
+
+tasks:
+  # Main setup tasks in execution order
+  setup-all:
+    desc: Complete setup - create cluster and install all components
+    deps: [install-deps, install-envoy-gateway]
+    cmds:
+      - echo "🎉 Setup complete! Your EnvoyGateway sandbox is ready."
+      - echo "Next steps:"
+      - echo "1. Run 'task deploy-all' to deploy use cases"
+      - echo "2. Run 'task test-all' to test deployments"
+      - echo "3. Check individual use case READMEs for details"
+      - task: verify-installation
+
+  install-deps:
+    desc: Install required dependencies (kind, helm, kubectl)
+    cmds:
+      - mkdir -p .task
+      - ./scripts/install-deps.sh
+      - touch .task/install-deps.done
+    generates:
+      - .task/install-deps.done
+    status:
+      - test -f .task/install-deps.done
+      - which kind
+      - which helm
+      - which kubectl
+
+  create-cluster:
+    desc: Create kind cluster
+    deps: [install-deps]
+    cmds:
+      - ./scripts/create-cluster.sh {{.CLUSTER_NAME}}
+      - kind export kubeconfig --name {{.CLUSTER_NAME}}
+      - touch .task/create-cluster.done
+    generates:
+      - .task/create-cluster.done
+    status:
+      - test -f .task/create-cluster.done
+      - kind get clusters | grep -q "{{.CLUSTER_NAME}}"
+
+  install-envoy-gateway:
+    desc: Install EnvoyGateway using Helm
+    deps: [create-cluster]
+    cmds:
+      - ./scripts/install-envoy-gateway.sh
+
+  # Status and verification tasks
+  verify-installation:
+    desc: Show current status of all components
+    cmds:
+      - |
+        echo "=== Installation Status ==="
+        echo "Use 'task --status <task-name>' to check individual tasks"
+        echo "Use 'task --status setup-all' to check overall setup"
+        echo ""
+      - ./scripts/verify-installation.sh
+
+
+
+  clean-task-cache:
+    desc: Clean Task cache files for cluster/deps (keeps deployment cache)
+    cmds:
+      - rm -f .task/install-deps.done .task/create-cluster.done
+      - echo "Task cache cleaned for infrastructure tasks."
+
+  status:
+    desc: Check EnvoyGateway status
+    cmds:
+      - ./scripts/verify-installation.sh
+
+  versions:
+    desc: Show component versions
+    cmds:
+      - |
+        echo "📋 Component Versions:"
+        echo "====================="
+        source {{.VERSIONS_FILE}}
+        echo "EnvoyGateway: $ENVOY_GATEWAY_VERSION"
+        echo "Gateway API: $GATEWAY_API_VERSION"
+        echo "cert-manager: $CERT_MANAGER_VERSION"
+        echo "Kubernetes: $KUBERNETES_VERSION"
+
+  # Use case deployment tasks
+  deploy-all:
+    desc: Deploy all use cases
+    cmds:
+      - task: deploy-merged-gateway
+      - task: deploy-backend-mtls
+      - task: deploy-active-standby-hc
+
+  deploy-merged-gateway:
+    desc: Deploy Merged Gateway Mode use case
+    dir: use-cases/merged-gateway
+    cmds:
+      - ./deploy.sh
+      - mkdir -p ../../.task
+      - touch ../../.task/deploy-merged-gateway.done
+    generates:
+      - .task/deploy-merged-gateway.done
+    status:
+      - test -f .task/deploy-merged-gateway.done
+
+  deploy-backend-mtls:
+    desc: Deploy Backend mTLS use case
+    dir: use-cases/backend-mtls
+    cmds:
+      - ./deploy.sh
+      - mkdir -p ../../.task
+      - touch ../../.task/deploy-backend-mtls.done
+    generates:
+      - .task/deploy-backend-mtls.done
+    status:
+      - test -f .task/deploy-backend-mtls.done
+
+  deploy-active-standby-hc:
+    desc: Deploy Active-Standby Health Check use case
+    dir: use-cases/active-standby-hc
+    cmds:
+      - ./deploy.sh
+      - mkdir -p ../../.task
+      - touch ../../.task/deploy-active-standby-hc.done
+    generates:
+      - .task/deploy-active-standby-hc.done
+    status:
+      - test -f .task/deploy-active-standby-hc.done
+
+  # Testing tasks
+  test-all:
+    desc: Test all deployed use cases
+    cmds:
+      - task: test-merged-gateway
+      - task: test-backend-mtls
+      - task: test-active-standby-hc
+
+  test-merged-gateway:
+    desc: Test Merged Gateway Mode use case
+    dir: use-cases/merged-gateway
+    cmds:
+      - ./test.sh
+
+  test-backend-mtls:
+    desc: Test Backend mTLS use case
+    dir: use-cases/backend-mtls
+    cmds:
+      - ./test.sh
+
+  test-active-standby-hc:
+    desc: Test Active-Standby Health Check use case
+    dir: use-cases/active-standby-hc
+    cmds:
+      - ./test.sh
+
+  # Utility tasks
+  kubectx:
+    desc: Switch to the kind cluster context
+    cmds:
+      - kind export kubeconfig --name {{.CLUSTER_NAME}}
+
+  # Cleanup tasks
+  cleanup:
+    desc: Clean up the kind cluster and resources
+    cmds:
+      - ./scripts/cleanup.sh {{.CLUSTER_NAME}}
+
+  clean-all:
+    desc: Clean up all environments and use cases
+    cmds:
+      - task: clean-kind
+        ignore_error: true
+      - task: clean-k8s
+        ignore_error: true
+      - task: clean-usecases
+        ignore_error: true
+
+  clean-kind:
+    desc: Clean up Kind cluster
+    cmds:
+      - kind delete cluster --name {{.CLUSTER_NAME}}
+
+  clean-k8s:
+    desc: Clean up Kubernetes deployment
+    cmds:
+      - ./scripts/cleanup-k8s.sh
+
+  clean-usecases:
+    desc: Clean up all use cases
+    cmds:
+      - task: clean-merged-gateway
+      - task: clean-backend-mtls
+      - task: clean-active-standby-hc
+
+  clean-merged-gateway:
+    desc: Clean up Merged Gateway Mode use case
+    cmds:
+      - kubectl delete -f use-cases/merged-gateway/ --ignore-not-found=true
+
+  clean-backend-mtls:
+    desc: Clean up Backend mTLS use case
+    cmds:
+      - kubectl delete -f use-cases/backend-mtls/ --ignore-not-found=true
+
+  clean-active-standby-hc:
+    desc: Clean up Active-Standby Health Check use case
+    cmds:
+      - kubectl delete -f use-cases/active-standby-hc/ --ignore-not-found=true
+
+  # Default task - shows tasks in logical order
+  default:
+    desc: Show available tasks in logical order
+    cmds:
+      - task --list --sort=none

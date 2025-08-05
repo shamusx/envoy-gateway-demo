@@ -1,0 +1,28 @@
+# EnvoyGateway Helm Values
+# Configuration for EnvoyGateway with Backend API extension enabled
+
+config:
+  envoyGateway:
+    gateway:
+      controllerName: gateway.envoyproxy.io/gatewayclass-controller
+    extensionApis:
+      enableBackend: true
+    logging:
+      level:
+        default: info
+
+# EnvoyGateway deployment configuration
+deployment:
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# Enable debug logging for development
+logging:
+  level:
+    default: info

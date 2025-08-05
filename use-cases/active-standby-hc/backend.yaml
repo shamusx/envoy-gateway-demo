@@ -1,0 +1,46 @@
+---
+# Primary Backend - Higher priority for active-standby behavior
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: primary-backend
+  namespace: active-standby-hc
+  labels:
+    app: active-standby-demo
+    component: backend
+    role: primary
+spec:
+  endpoints:
+  - fqdn:
+      hostname: httpbingo.org
+      port: 80
+---
+# Standby Backend - Lower priority, used when primary fails health checks
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: Backend
+metadata:
+  name: standby-backend
+  namespace: active-standby-hc
+  labels:
+    app: active-standby-demo
+    component: backend
+    role: standby
+spec:
+  fallback: true
+  endpoints:
+  - fqdn:
+      hostname: httpbin.org
+      port: 80
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: HTTPRouteFilter
+metadata:
+  name: backend-host-rewrite
+  namespace: active-standby-hc
+  labels:
+    app: active-standby-demo
+    component: backend
+spec:
+  urlRewrite:
+    hostname:
+      type: Backend

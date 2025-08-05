@@ -1,0 +1,82 @@
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: logging-updates-hc
+  namespace: active-standby-hc
+spec:
+  # Configure merged gateway behavior
+  mergeGateways: true
+  # Optional: Configure proxy-level settings
+  logging:
+    level:
+      hc: debug
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: active-standby-gateway
+  namespace: active-standby-hc
+  labels:
+    app: active-standby-demo
+    component: gateway
+spec:
+  gatewayClassName: eg
+  infrastructure:
+    parametersRef:
+      group: gateway.envoyproxy.io
+      kind: EnvoyProxy
+      name: logging-updates-hc
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 18080
+    hostname: "active-standby.demo.int"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: active-standby-route
+  namespace: active-standby-hc
+  labels:
+    app: active-standby-demo
+    component: routing
+spec:
+  hostnames:
+  - "active-standby.demo.int"
+  parentRefs:
+  - group: gateway.networking.k8s.io
+    kind: Gateway
+    name: active-standby-gateway
+    namespace: active-standby-hc
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    filters:
+      - type: ExtensionRef
+        extensionRef:
+          group: gateway.envoyproxy.io
+          kind: HTTPRouteFilter
+          name: backend-host-rewrite
+    backendRefs:
+    - group: gateway.envoyproxy.io
+      kind: Backend
+      name: primary-backend
+      port: 80
+      # filters:
+      # - type: ResponseHeaderModifier
+      #   responseHeaderModifier:
+      #     add:
+      #     - name: "httpbin-service"
+      #       value: "httpbingo.org"
+    - group: gateway.envoyproxy.io
+      kind: Backend
+      name: standby-backend
+      port: 80
+      # filters:
+      # - type: ResponseHeaderModifier
+      #   responseHeaderModifier:
+      #     add:
+      #     - name: "httpbin-service"
+      #       value: "httpbin.org"

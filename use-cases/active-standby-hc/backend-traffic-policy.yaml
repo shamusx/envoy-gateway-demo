@@ -1,0 +1,37 @@
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: active-standby-health-policy
+  namespace: active-standby-hc
+  labels:
+    app: active-standby-demo
+    component: policy
+spec:
+  targetRefs:
+  - group: gateway.networking.k8s.io
+    kind: HTTPRoute
+    name: active-standby-route
+  healthCheck:
+    # Panic threshold: percentage of unhealthy backends before panic mode
+    panicThreshold: 0
+    active:
+      # Health check configuration
+      interval: 20s
+      timeout: 3s
+      unhealthyThreshold: 3
+      healthyThreshold: 2
+      type: HTTP
+      http:
+        hostname: httpbingo.org # hostname released as of 1.5.0
+        path: /get
+        method: GET
+        expectedStatuses: [200,402] # 402 is due to httpbingo using fly.io
+    passive:
+      baseEjectionTime: 30s
+      interval: 30s
+      maxEjectionPercent: 100
+      consecutive5XxErrors: 1 
+      consecutiveGatewayErrors: 0
+      consecutiveLocalOriginFailures: 1
+      splitExternalLocalOriginErrors: false

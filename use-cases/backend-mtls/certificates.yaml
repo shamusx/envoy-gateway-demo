@@ -1,0 +1,20 @@
+# Client certificate for EnvoyGateway to present to backend
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: envoygateway-client-cert
+  namespace: httpbin-tls
+spec:
+  secretName: envoygateway-client-cert
+  issuerRef:
+    name: selfsigned-ca
+    kind: ClusterIssuer
+  commonName: envoygateway-client
+  dnsNames:
+  - envoygateway-client
+  - envoygateway-client.httpbin-tls
+  - envoygateway-client.httpbin-tls.svc.cluster.local
+  usages:
+  - digital signature
+  - key encipherment
+  - client auth

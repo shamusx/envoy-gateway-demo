@@ -1,0 +1,63 @@
+---
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: EnvoyProxy
+metadata:
+  name: custom-proxy-mtls
+  namespace: httpbin-tls
+spec:
+  backendTLS:
+    clientCertificateRef: 
+      kind: Secret
+      name: envoygateway-client-cert
+      namespace: httpbin-tls
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: backend-mtls-gw
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+  parametersRef:
+    group: gateway.envoyproxy.io
+    kind: EnvoyProxy
+    name: custom-proxy-mtls
+    namespace: httpbin-tls 
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: backend-mtls-gateway
+  namespace: httpbin-tls
+spec:
+  # infrastructure:
+  #   parametersRef:
+  #     group: gateway.envoyproxy.io
+  #     kind: EnvoyProxy
+  #     name: custom-proxy-mtls
+  gatewayClassName: backend-mtls-gw
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 18080
+    hostname: "mtls-backend.demo.int"
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: backend-mtls-route
+  namespace: httpbin-tls
+spec:
+  parentRefs:
+  - name: backend-mtls-gateway
+  hostnames:
+  - "mtls-backend.demo.int"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - group: ""
+      kind: Service
+      name: httpbin-tls
+      port: 8443

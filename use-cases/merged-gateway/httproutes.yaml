@@ -1,0 +1,95 @@
+# HTTPRoute for Team A - Web Traffic
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: team-a-web
+  namespace: team-a
+spec:
+  parentRefs:
+  - name: team-a-gateway
+    sectionName: http-team-a
+  hostnames:
+  - "web-team-a.merged-gw.int"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - group: ""
+      kind: Service
+      name: httpbin
+      namespace: httpbin
+      port: 8000
+---
+# HTTPRoute for Team A - API Traffic
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: team-a-api
+  namespace: team-a
+spec:
+  parentRefs:
+  - name: team-a-gateway
+    sectionName: api-team-a
+  hostnames:
+  - "api-team-a.merged-gw.int"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    backendRefs:
+    - group: ""
+      kind: Service
+      name: httpbin
+      namespace: httpbin
+      port: 8000
+---
+# HTTPRoute for Team B - Web Traffic
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: team-b-web
+  namespace: team-b
+spec:
+  parentRefs:
+  - name: team-b-gateway
+    sectionName: http-team-b
+  hostnames:
+  - "web-team-b.merged-gw.int"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - group: ""
+      kind: Service
+      name: httpbin
+      namespace: httpbin
+      port: 8000
+---
+# HTTPRoute for Team B - API Traffic
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: team-b-api
+  namespace: team-b
+spec:
+  parentRefs:
+  - name: team-b-gateway
+    sectionName: api-team-b
+  hostnames:
+  - "api-team-b.merged-gw.int"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /api
+    backendRefs:
+    - group: ""
+      kind: Service
+      name: httpbin
+      namespace: httpbin
+      port: 8000

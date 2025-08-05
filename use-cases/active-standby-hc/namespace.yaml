@@ -1,0 +1,9 @@
+---
+# Namespace for Active-Standby Health Check use case
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: active-standby-hc
+  labels:
+    name: active-standby-hc
+    app: active-standby-demo
