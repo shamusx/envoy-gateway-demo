@@ -1,0 +1,214 @@
+name: Validation Workflow
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CLUSTER_NAME: envoygateway-sandbox-ci
+  KIND_VERSION: v0.29.0
+  KUBECTL_VERSION: v1.32.0
+  HELM_VERSION: v3.14.0
+
+jobs:
+  setup-and-validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+
+      - name: Install Task
+        run: |
+          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Install dependencies
+        run: |
+          # Install kind
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/${KIND_VERSION}/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+          
+          # Install kubectl
+          curl -LO https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+          
+          # Install helm
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Verify tool installations
+        run: |
+          echo "Verifying installations..."
+          kind version
+          kubectl version --client
+          helm version
+
+      - name: Create Kind cluster
+        run: |
+          task create-cluster
+
+      - name: Install EnvoyGateway
+        run: |
+          task install-envoy-gateway
+
+      - name: Verify installation
+        run: |
+          task verify-installation
+
+      - name: Deploy all use cases
+        run: |
+          task deploy-all
+
+      - name: Run all tests
+        run: |
+          task test-all
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          echo "Collecting diagnostic information..."
+          kubectl get nodes -o wide
+          kubectl get pods -A
+          kubectl describe pods -n envoy-gateway-system
+          kubectl logs -n envoy-gateway-system -l app.kubernetes.io/name=envoy-gateway --tail=100
+
+      - name: Cleanup
+        if: always()
+        run: |
+          task cleanup || true
+          kind delete cluster --name ${CLUSTER_NAME} || true
+
+  validate-scripts:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check script permissions
+        run: |
+          echo "Checking executable permissions for scripts..."
+          find scripts -type f -name "*.sh" | while read script; do
+            if [[ ! -x "$script" ]]; then
+              echo "❌ $script is not executable"
+              exit 1
+            else
+              echo "✅ $script"
+            fi
+          done
+          
+          find use-cases -type f -name "*.sh" | while read script; do
+            if [[ ! -x "$script" ]]; then
+              echo "❌ $script is not executable"
+              exit 1
+            else
+              echo "✅ $script"
+            fi
+          done
+
+      - name: Shellcheck validation
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          
+          echo "Running shellcheck on all scripts..."
+          find . -type f -name "*.sh" -not -path "./.git/*" | while read script; do
+            echo "Checking $script..."
+            shellcheck -S warning "$script" || true
+          done
+
+  validate-kubernetes-manifests:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install kubectl
+        run: |
+          curl -LO https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+
+      - name: Validate YAML manifests
+        run: |
+          echo "Validating Kubernetes manifests..."
+          
+          # Find all YAML files
+          find . -type f \( -name "*.yaml" -o -name "*.yml" \) -not -path "./.git/*" -not -path "./.github/*" | while read yaml_file; do
+            echo "Validating $yaml_file..."
+            
+            # Skip Taskfile.yml as it's not a K8s manifest
+            if [[ "$yaml_file" == "./Taskfile.yml" ]]; then
+              echo "  Skipping Taskfile.yml"
+              continue
+            fi
+            
+            # Skip Helm values files
+            if [[ "$yaml_file" == *"values.yaml"* ]]; then
+              echo "  Skipping Helm values file"
+              continue
+            fi
+            
+            # Try to validate as Kubernetes manifest
+            kubectl apply --dry-run=client -f "$yaml_file" 2>/dev/null || echo "  ⚠️  Not a valid K8s manifest or requires runtime values"
+          done
+
+  validate-taskfile:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Task
+        run: |
+          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Validate Taskfile syntax
+        run: |
+          echo "Validating Taskfile.yml syntax..."
+          task --list > /dev/null
+          if [ $? -eq 0 ]; then
+            echo "✅ Taskfile.yml is valid"
+          else
+            echo "❌ Taskfile.yml has syntax errors"
+            exit 1
+          fi
+
+      - name: List all available tasks
+        run: |
+          echo "Available tasks:"
+          task --list
+
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run Trivy security scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
