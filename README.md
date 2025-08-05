@@ -159,11 +159,7 @@ task setup-all         # Rebuild from scratch
 
 ## Component Versions
 
-All component versions are centralized in `versions.env`:
-
-- **EnvoyGateway**: v1.4.2
-- **cert-manager**: v1.18.2
-- **Kubernetes**: v1.28.0 (Kind clusters)
+All component versions are centralized in [`versions.env`](./versions.env) for easy management.
 
 ## Project Structure
 
