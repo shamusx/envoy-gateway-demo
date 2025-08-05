@@ -127,30 +127,7 @@ kubectl port-forward -n envoy-gateway-system service/$(kubectl get service -n en
 curl -H "Host: web-team-a.merged-gw.int" http://localhost:18080/get
 ```
 
-## Gateway Merging Flow
 
-```mermaid
-sequenceDiagram
-    participant ClientA as Team A Client
-    participant ClientB as Team B Client
-    participant SharedProxy as Shared EnvoyProxy<br/>Merged Gateway
-    participant Backend as httpbin<br/>Backend
-    
-    Note over ClientA,Backend: Team A Request Flow
-    ClientA->>SharedProxy: HTTP GET /<br/>Host: web-team-a.merged-gw.int
-    SharedProxy->>Backend: HTTP GET /get<br/>(via team-a-web route)
-    Backend->>SharedProxy: HTTP 200 OK + JSON Response
-    SharedProxy->>ClientA: HTTP 200 OK + JSON Response
-    
-    Note over ClientB,Backend: Team B Request Flow (Parallel)
-    ClientB->>SharedProxy: HTTP GET /api<br/>Host: api-team-b.merged-gw.int
-    SharedProxy->>Backend: HTTP GET /get<br/>(via team-b-api route)
-    Backend->>SharedProxy: HTTP 200 OK + JSON Response
-    SharedProxy->>ClientB: HTTP 200 OK + JSON Response
-    
-    Note right of SharedProxy: Single proxy handles:<br/>• Multiple Gateway configs<br/>• Different hostnames<br/>• Cross-namespace routing<br/>• Resource sharing
-    Note left of Backend: Backend serves:<br/>• All team requests<br/>• Via ReferenceGrant<br/>• Cross-namespace access<br/>• Shared infrastructure
-```
 
 ## Configuration Details
 
