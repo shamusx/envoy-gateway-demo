@@ -45,6 +45,10 @@ jobs:
           
           # Install helm
           curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+          
+          # Install egctl
+          curl -fsSL https://gateway.envoyproxy.io/get-egctl.sh | VERSION=latest bash
+          sudo mv ./bin/egctl /usr/local/bin/egctl
 
       - name: Verify tool installations
         run: |
@@ -52,6 +56,7 @@ jobs:
           kind version
           kubectl version --client
           helm version
+          egctl version
 
       - name: Create Kind cluster
         run: |
@@ -134,25 +139,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Install kubectl
-        run: |
-          curl -LO https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/kubectl
 
-      - name: Validate YAML manifests
+
+      - name: Validate EnvoyGateway manifests
         run: |
-          echo "Validating Kubernetes manifests..."
+          echo "Validating EnvoyGateway manifests with egctl..."
           
-          # Find all YAML files
-          find . -type f \( -name "*.yaml" -o -name "*.yml" \) -not -path "./.git/*" -not -path "./.github/*" | while read yaml_file; do
-            echo "Validating $yaml_file..."
-            
-            # Skip Taskfile.yml as it's not a K8s manifest
-            if [[ "$yaml_file" == "./Taskfile.yml" ]]; then
-              echo "  Skipping Taskfile.yml"
-              continue
-            fi
+          # Find all YAML files in use cases and examples
+          find use-cases examples -type f \( -name "*.yaml" -o -name "*.yml" \) 2>/dev/null | while read yaml_file; do
+            echo "Validating $yaml_file with egctl..."
             
             # Skip Helm values files
             if [[ "$yaml_file" == *"values.yaml"* ]]; then
@@ -160,7 +155,33 @@ jobs:
               continue
             fi
             
-            # Try to validate as Kubernetes manifest
+            # Use egctl validate for EnvoyGateway-specific validation
+            validation_result=$(egctl x validate -f "$yaml_file" 2>&1)
+            exit_code=$?
+            
+            if [[ $exit_code -eq 0 && "$validation_result" == *"OK"* ]]; then
+              echo "  ✅ Valid EnvoyGateway manifest: $validation_result"
+            elif [[ $exit_code -eq 0 ]]; then
+              echo "  ✅ EnvoyGateway validation passed: $validation_result"
+            else
+              echo "  ⚠️  Not an EnvoyGateway manifest or validation failed, trying kubectl..."
+              echo "  egctl output: $validation_result"
+              # Fallback to kubectl for standard Kubernetes resources
+              if kubectl apply --dry-run=client -f "$yaml_file" 2>/dev/null; then
+                echo "  ✅ Valid Kubernetes manifest"
+              else
+                echo "  ⚠️  Not a valid K8s manifest or requires runtime values"
+              fi
+            fi
+          done
+
+      - name: Validate configuration files
+        run: |
+          echo "Validating configuration files..."
+          
+          # Validate cert-manager issuers and other config files
+          find configs -type f \( -name "*.yaml" -o -name "*.yml" \) 2>/dev/null | while read yaml_file; do
+            echo "Validating $yaml_file..."
             kubectl apply --dry-run=client -f "$yaml_file" 2>/dev/null || echo "  ⚠️  Not a valid K8s manifest or requires runtime values"
           done
 
