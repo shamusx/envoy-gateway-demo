@@ -48,7 +48,6 @@ jobs:
           
           # Install egctl
           curl -fsSL https://gateway.envoyproxy.io/get-egctl.sh | VERSION=latest bash
-          sudo mv ./bin/egctl /usr/local/bin/egctl
 
       - name: Verify tool installations
         run: |
