@@ -143,18 +143,29 @@ jobs:
       - name: Validate EnvoyGateway manifests
         run: |
           echo "Validating EnvoyGateway manifests with egctl..."
+          echo "================================================"
           
           # Find all YAML files in use cases and examples
-          find use-cases examples -type f \( -name "*.yaml" -o -name "*.yml" \) 2>/dev/null | while read yaml_file; do
-            echo "Validating $yaml_file with egctl..."
+          find use-cases examples -type f \( -name "*.yaml" -o -name "*.yml" \) 2>/dev/null | sort | while read yaml_file; do
+            # Extract folder and file information
+            folder_name=$(dirname "$yaml_file")
+            file_name=$(basename "$yaml_file")
+            use_case=$(echo "$folder_name" | cut -d'/' -f2)
+            
+            echo ""
+            echo "📁 Use Case: $use_case"
+            echo "📄 File: $file_name"
+            echo "🔍 Full Path: $yaml_file"
+            echo "---"
             
             # Skip Helm values files
             if [[ "$yaml_file" == *"values.yaml"* ]]; then
-              echo "  Skipping Helm values file"
+              echo "  ⏭️  Skipping Helm values file"
               continue
             fi
             
             # Use egctl validate for EnvoyGateway-specific validation
+            echo "  Running: egctl x validate -f $yaml_file"
             validation_result=$(egctl x validate -f "$yaml_file" 2>&1)
             exit_code=$?
             
@@ -163,16 +174,22 @@ jobs:
             elif [[ $exit_code -eq 0 ]]; then
               echo "  ✅ EnvoyGateway validation passed: $validation_result"
             else
-              echo "  ⚠️  Not an EnvoyGateway manifest or validation failed, trying kubectl..."
+              echo "  ⚠️  egctl validation failed, trying kubectl fallback..."
               echo "  egctl output: $validation_result"
+              echo "  Running: kubectl apply --dry-run=client -f $yaml_file"
               # Fallback to kubectl for standard Kubernetes resources
               if kubectl apply --dry-run=client -f "$yaml_file" 2>/dev/null; then
-                echo "  ✅ Valid Kubernetes manifest"
+                echo "  ✅ Valid Kubernetes manifest (kubectl validation)"
               else
-                echo "  ⚠️  Not a valid K8s manifest or requires runtime values"
+                echo "  ❌ Validation failed with both egctl and kubectl"
+                echo "  This may indicate an invalid manifest or missing dependencies"
               fi
             fi
           done
+          
+          echo ""
+          echo "================================================"
+          echo "Manifest validation completed"
 
       - name: Validate configuration files
         run: |
