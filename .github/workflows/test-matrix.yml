@@ -1,0 +1,95 @@
+name: Test Matrix
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CLUSTER_NAME: envoygateway-test
+
+jobs:
+  test-use-cases:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        use-case:
+          - merged-gateway
+          - backend-mtls
+          - active-standby-hc
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup environment
+        run: |
+          # Install Task
+          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+          
+          # Install kind
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/v0.29.0/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+          
+          # Install kubectl
+          curl -LO https://dl.k8s.io/release/v1.32.0/bin/linux/amd64/kubectl
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+          
+          # Install helm
+          curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+
+      - name: Create cluster
+        run: |
+          task create-cluster
+
+      - name: Install EnvoyGateway
+        run: |
+          task install-envoy-gateway
+
+      - name: Wait for EnvoyGateway
+        run: |
+          echo "Waiting for EnvoyGateway to be ready..."
+          kubectl wait --for=condition=available --timeout=300s \
+            deployment/envoy-gateway -n envoy-gateway-system || \
+            (kubectl describe deployment envoy-gateway -n envoy-gateway-system && exit 1)
+
+      - name: Deploy use case - ${{ matrix.use-case }}
+        run: |
+          task deploy-${{ matrix.use-case }}
+
+      - name: Test use case - ${{ matrix.use-case }}
+        run: |
+          task test-${{ matrix.use-case }}
+
+      - name: Collect logs on failure
+        if: failure()
+        run: |
+          echo "=== Pods in all namespaces ==="
+          kubectl get pods -A
+          
+          echo "=== EnvoyGateway logs ==="
+          kubectl logs -n envoy-gateway-system -l app.kubernetes.io/name=envoy-gateway --tail=50
+          
+          echo "=== Use case resources ==="
+          case "${{ matrix.use-case }}" in
+            merged-gateway)
+              kubectl get all -n merged-gateway
+              ;;
+            backend-mtls)
+              kubectl get all -n backend-mtls
+              ;;
+            active-standby-hc)
+              kubectl get all -n active-standby
+              ;;
+          esac
+
+      - name: Cleanup
+        if: always()
+        run: |
+          kind delete cluster --name ${CLUSTER_NAME}-${{ matrix.use-case }} || true

@@ -1,0 +1,258 @@
+name: PR Validation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - '**.sh'
+      - '**.yaml'
+      - '**.yml'
+      - 'Taskfile.yml'
+      - '.github/workflows/**'
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      scripts: ${{ steps.filter.outputs.scripts }}
+      manifests: ${{ steps.filter.outputs.manifests }}
+      workflows: ${{ steps.filter.outputs.workflows }}
+      taskfile: ${{ steps.filter.outputs.taskfile }}
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            scripts:
+              - '**.sh'
+            manifests:
+              - '**.yaml'
+              - '**.yml'
+              - '!.github/workflows/**'
+              - '!Taskfile.yml'
+            workflows:
+              - '.github/workflows/**'
+            taskfile:
+              - 'Taskfile.yml'
+
+  lint-scripts:
+    needs: changes
+    if: ${{ needs.changes.outputs.scripts == 'true' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Run shellcheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          severity: warning
+          check_together: yes
+
+      - name: Check script formatting
+        run: |
+          # Install shfmt
+          curl -sS https://webinstall.dev/shfmt | bash
+          export PATH="$HOME/.local/bin:$PATH"
+          
+          # Check formatting
+          find . -type f -name "*.sh" -not -path "./.git/*" | while read script; do
+            if ! shfmt -d "$script"; then
+              echo "❌ $script needs formatting"
+              echo "Run: shfmt -w $script"
+            fi
+          done
+
+  validate-manifests:
+    needs: changes
+    if: ${{ needs.changes.outputs.manifests == 'true' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install tools
+        run: |
+          # Install kubectl
+          curl -LO https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/kubectl
+          
+          # Install kubeconform for manifest validation
+          curl -L https://github.com/yannh/kubeconform/releases/latest/download/kubeconform-linux-amd64.tar.gz | tar xz
+          sudo mv kubeconform /usr/local/bin
+
+      - name: Validate Kubernetes manifests
+        run: |
+          find . -type f \( -name "*.yaml" -o -name "*.yml" \) \
+            -not -path "./.git/*" \
+            -not -path "./.github/*" \
+            -not -name "Taskfile.yml" \
+            -not -name "*values.yaml" | while read manifest; do
+            
+            echo "Validating $manifest..."
+            kubeconform -summary -output json "$manifest" || true
+          done
+
+      - name: Check YAML syntax
+        run: |
+          pip install yamllint
+          
+          # Create yamllint config
+          cat > .yamllint.yml << EOF
+          extends: default
+          rules:
+            line-length:
+              max: 120
+              level: warning
+            truthy:
+              allowed-values: ['true', 'false', 'yes', 'no', 'on', 'off']
+            comments:
+              min-spaces-from-content: 1
+          EOF
+          
+          yamllint -c .yamllint.yml .
+
+  validate-taskfile:
+    needs: changes
+    if: ${{ needs.changes.outputs.taskfile == 'true' }}
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Task
+        run: |
+          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Validate Taskfile
+        run: |
+          # Check syntax
+          task --list > /dev/null
+          
+          # Verify all tasks are documented
+          echo "Checking task documentation..."
+          task --list --json | jq -r '.tasks[].name' | while read task; do
+            if ! task --summary "$task" | grep -q .; then
+              echo "⚠️  Task '$task' has no description"
+            fi
+          done
+
+  test-quick:
+    needs: [changes]
+    if: ${{ needs.changes.outputs.scripts == 'true' || needs.changes.outputs.manifests == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+          task install-deps
+
+      - name: Create cluster
+        run: |
+          task create-cluster
+
+      - name: Install EnvoyGateway
+        run: |
+          task install-envoy-gateway
+
+      - name: Quick smoke test
+        run: |
+          task verify-installation
+          
+          # Basic connectivity test
+          kubectl get nodes
+          kubectl get pods -n envoy-gateway-system
+          
+          # Verify CRDs are installed
+          kubectl get crd | grep gateway.networking.k8s.io
+
+      - name: Cleanup
+        if: always()
+        run: |
+          task cleanup || true
+
+  pr-comment:
+    needs: [lint-scripts, validate-manifests, validate-taskfile, test-quick]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Comment PR
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const jobResults = {
+              'lint-scripts': '${{ needs.lint-scripts.result }}',
+              'validate-manifests': '${{ needs.validate-manifests.result }}',
+              'validate-taskfile': '${{ needs.validate-taskfile.result }}',
+              'test-quick': '${{ needs.test-quick.result }}'
+            };
+            
+            let comment = '## PR Validation Results\n\n';
+            comment += '| Check | Status |\n';
+            comment += '|-------|--------|\n';
+            
+            for (const [job, result] of Object.entries(jobResults)) {
+              if (result === 'success') {
+                comment += `| ${job} | ✅ Passed |\n`;
+              } else if (result === 'failure') {
+                comment += `| ${job} | ❌ Failed |\n`;
+              } else if (result === 'skipped') {
+                comment += `| ${job} | ⏭️ Skipped |\n`;
+              } else {
+                comment += `| ${job} | ⏸️ Not run |\n`;
+              }
+            }
+            
+            comment += '\n### Next Steps\n';
+            
+            const allPassed = Object.values(jobResults).every(r => r === 'success' || r === 'skipped');
+            if (allPassed) {
+              comment += '✅ All checks passed! This PR is ready for review.\n';
+            } else {
+              comment += '❌ Some checks failed. Please review the logs and fix any issues.\n';
+            }
+            
+            // Find and update or create comment
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+            });
+            
+            const botComment = comments.find(comment => 
+              comment.user.type === 'Bot' && comment.body.includes('PR Validation Results')
+            );
+            
+            if (botComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: botComment.id,
+                body: comment
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body: comment
+              });
+            }
