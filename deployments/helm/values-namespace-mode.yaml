@@ -1,0 +1,33 @@
+# EnvoyGateway Helm Values - Namespace Mode
+# Configuration for EnvoyGateway in namespace-scoped mode with Backend API extension enabled
+
+config:
+  envoyGateway:
+    gateway:
+      controllerName: gateway.envoyproxy.io/gatewayclass-controller
+    provider:
+      type: Kubernetes
+      kubernetes:
+        deploy:
+          type: GatewayNamespace
+    extensionApis:
+      enableBackend: true
+    logging:
+      level:
+        default: info
+
+# EnvoyGateway deployment configuration
+deployment:
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 100m
+      memory: 256Mi
+
+# Enable debug logging for development
+logging:
+  level:
+    default: info

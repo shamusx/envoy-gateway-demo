@@ -8,10 +8,22 @@ vars:
 tasks:
   # Main setup tasks in execution order
   setup-all:
-    desc: Complete setup - create cluster and install all components
+    desc: Complete setup - create cluster and install all components (cluster-wide mode)
     deps: [install-deps, install-envoy-gateway]
     cmds:
       - echo "🎉 Setup complete! Your EnvoyGateway sandbox is ready."
+      - echo "Next steps:"
+      - echo "1. Run 'task deploy-all' to deploy use cases"
+      - echo "2. Run 'task test-all' to test deployments"
+      - echo "3. Check individual use case READMEs for details"
+      - task: verify-installation
+
+  setup-all-namespace-mode:
+    desc: Complete setup - create cluster and install all components (namespace-scoped mode)
+    deps: [install-deps, install-envoy-gateway-namespace-mode]
+    cmds:
+      - echo "🎉 Setup complete! Your EnvoyGateway sandbox is ready in namespace mode."
+      - echo "ℹ️  EnvoyGateway is watching 'default' and 'envoy-gateway-system' namespaces only"
       - echo "Next steps:"
       - echo "1. Run 'task deploy-all' to deploy use cases"
       - echo "2. Run 'task test-all' to test deployments"
@@ -46,10 +58,16 @@ tasks:
       - kind get clusters | grep -q "{{.CLUSTER_NAME}}"
 
   install-envoy-gateway:
-    desc: Install EnvoyGateway using Helm
+    desc: Install EnvoyGateway using Helm (default cluster-wide mode)
     deps: [create-cluster]
     cmds:
       - ./scripts/install-envoy-gateway.sh
+
+  install-envoy-gateway-namespace-mode:
+    desc: Install EnvoyGateway using Helm in namespace-scoped mode
+    deps: [create-cluster]
+    cmds:
+      - ./scripts/install-envoy-gateway-namespace-mode.sh
 
   # Status and verification tasks
   verify-installation:
@@ -91,9 +109,22 @@ tasks:
   deploy-all:
     desc: Deploy all use cases
     cmds:
+      - task: deploy-basic-routing
       - task: deploy-merged-gateway
       - task: deploy-backend-mtls
       - task: deploy-active-standby-hc
+
+  deploy-basic-routing:
+    desc: Deploy Basic Routing use case
+    dir: use-cases/basic-routing
+    cmds:
+      - ./deploy.sh
+      - mkdir -p ../../.task
+      - touch ../../.task/deploy-basic-routing.done
+    generates:
+      - .task/deploy-basic-routing.done
+    status:
+      - test -f .task/deploy-basic-routing.done
 
   deploy-merged-gateway:
     desc: Deploy Merged Gateway Mode use case
@@ -135,9 +166,16 @@ tasks:
   test-all:
     desc: Test all deployed use cases
     cmds:
+      - task: test-basic-routing
       - task: test-merged-gateway
       - task: test-backend-mtls
       - task: test-active-standby-hc
+
+  test-basic-routing:
+    desc: Test Basic Routing use case
+    dir: use-cases/basic-routing
+    cmds:
+      - ./test.sh
 
   test-merged-gateway:
     desc: Test Merged Gateway Mode use case
@@ -192,9 +230,15 @@ tasks:
   clean-usecases:
     desc: Clean up all use cases
     cmds:
+      - task: clean-basic-routing
       - task: clean-merged-gateway
       - task: clean-backend-mtls
       - task: clean-active-standby-hc
+
+  clean-basic-routing:
+    desc: Clean up Basic Routing use case
+    cmds:
+      - kubectl delete -f use-cases/basic-routing/ --ignore-not-found=true
 
   clean-merged-gateway:
     desc: Clean up Merged Gateway Mode use case
