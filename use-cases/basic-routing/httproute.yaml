@@ -1,0 +1,126 @@
+# HTTPRoute for /get endpoint
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-get
+  namespace: httpbin
+spec:
+  parentRefs:
+  - name: httpbin-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /get
+    backendRefs:
+    - group: ""
+      kind: Service
+      name: httpbin
+      namespace: httpbin
+      port: 8000
+---
+# HTTPRoute for /headers endpoint
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-headers
+  namespace: httpbin
+spec:
+  parentRefs:
+  - name: httpbin-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /headers
+    backendRefs:
+    - group: ""
+      kind: Service
+      name: httpbin
+      namespace: httpbin
+      port: 8000
+---
+# HTTPRoute for /status/* endpoints
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-status
+  namespace: httpbin
+spec:
+  parentRefs:
+  - name: httpbin-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /status/
+    backendRefs:
+    - group: ""
+      kind: Service
+      name: httpbin
+      namespace: httpbin
+      port: 8000
+---
+# HTTPRoute for /anything endpoint (accepts any HTTP method)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-anything
+  namespace: httpbin
+spec:
+  parentRefs:
+  - name: httpbin-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /anything
+    backendRefs:
+    - group: ""
+      kind: Service
+      name: httpbin
+      namespace: httpbin
+      port: 8000
+---
+# HTTPRoute for /post endpoint (POST method)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-post
+  namespace: httpbin
+spec:
+  parentRefs:
+  - name: httpbin-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /post
+      method: POST
+    backendRefs:
+    - group: ""
+      kind: Service
+      name: httpbin
+      namespace: httpbin
+      port: 8000
+---
+# HTTPRoute for /ip endpoint
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: route-ip
+  namespace: httpbin
+spec:
+  parentRefs:
+  - name: httpbin-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /ip
+    backendRefs:
+    - group: ""
+      kind: Service
+      name: httpbin
+      namespace: httpbin
+      port: 8000
