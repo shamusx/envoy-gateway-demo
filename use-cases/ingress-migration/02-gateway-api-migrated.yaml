@@ -1,0 +1,165 @@
+# Migrated Gateway API Resources (After Migration)
+# These resources represent the Ingress configurations converted to Gateway API format
+# This is the modern, cloud-native approach using Envoy Gateway
+
+---
+# GatewayClass - Links to Envoy Gateway controller
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: envoy-ingress-migration
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+# Gateway - Replaces the role of Ingress Controller
+# This single Gateway handles traffic for multiple hosts
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: migration-gateway
+  namespace: ingress-demo
+spec:
+  gatewayClassName: envoy-ingress-migration
+  listeners:
+  # Listener for web.example.com
+  - name: web-listener
+    protocol: HTTP
+    port: 8080
+    hostname: "web.example.com"
+    allowedRoutes:
+      namespaces:
+        from: Same
+  # Listener for api.example.com
+  - name: api-listener
+    protocol: HTTP
+    port: 8080
+    hostname: "api.example.com"
+    allowedRoutes:
+      namespaces:
+        from: Same
+  # Listener for production host
+  - name: prod-listener
+    protocol: HTTP
+    port: 8080
+    hostname: "prod.example.com"
+    allowedRoutes:
+      namespaces:
+        from: Same
+  # Listener for staging host
+  - name: staging-listener
+    protocol: HTTP
+    port: 8080
+    hostname: "staging.example.com"
+    allowedRoutes:
+      namespaces:
+        from: Same
+---
+# HTTPRoute #1: Web application routes (migrated from web-ingress)
+# This replaces the web-ingress Ingress resource
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: web-routes
+  namespace: ingress-demo
+spec:
+  parentRefs:
+  - name: migration-gateway
+    sectionName: web-listener
+  hostnames:
+  - "web.example.com"
+  rules:
+  # Route for /app paths with rewrite
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /app
+    filters:
+    - type: URLRewrite
+      urlRewrite:
+        path:
+          type: ReplacePrefixMatch
+          replacePrefixMatch: /
+    backendRefs:
+    - name: web-service
+      port: 80
+  # Route for /status path
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /status
+    backendRefs:
+    - name: web-service
+      port: 80
+---
+# HTTPRoute #2: API routes (migrated from api-ingress)
+# This replaces the api-ingress Ingress resource
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: api-routes
+  namespace: ingress-demo
+spec:
+  parentRefs:
+  - name: migration-gateway
+    sectionName: api-listener
+  hostnames:
+  - "api.example.com"
+  rules:
+  # Route for /v1 API
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /v1
+    backendRefs:
+    - name: api-service
+      port: 80
+  # Route for /v2 API
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /v2
+    backendRefs:
+    - name: api-service
+      port: 80
+---
+# HTTPRoute #3: Production host route (migrated from multi-host-ingress)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: prod-routes
+  namespace: ingress-demo
+spec:
+  parentRefs:
+  - name: migration-gateway
+    sectionName: prod-listener
+  hostnames:
+  - "prod.example.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: web-service
+      port: 80
+---
+# HTTPRoute #4: Staging host route (migrated from multi-host-ingress)
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: staging-routes
+  namespace: ingress-demo
+spec:
+  parentRefs:
+  - name: migration-gateway
+    sectionName: staging-listener
+  hostnames:
+  - "staging.example.com"
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: web-service
+      port: 80

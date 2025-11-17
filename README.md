@@ -24,6 +24,7 @@ task test-all           # Test all deployments
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) - Kubernetes CLI
 - [Helm](https://helm.sh/docs/intro/install/) - Package manager for Kubernetes
 - [Task](https://taskfile.dev/installation/) - Modern task runner
+- [ingress2gateway](https://github.com/kubernetes-sigs/ingress2gateway) - Ingress to Gateway API converter (installed via `task install-deps`)
 
 ## Deployment Modes
 
@@ -76,17 +77,34 @@ task deploy-all         # Deploy all use cases
 task test-all           # Test all use cases
 
 # Deploy individual use cases
+task deploy-basic-routing       # Basic Gateway API routing
 task deploy-merged-gateway      # Multi-tenant gateway sharing
 task deploy-backend-mtls        # Backend mTLS authentication
 task deploy-active-standby-hc   # Health check with failover
+task deploy-ingress-migration   # Ingress to Gateway API migration
 
 # Test individual use cases
+task test-basic-routing
 task test-merged-gateway
 task test-backend-mtls
 task test-active-standby-hc
+task test-ingress-migration
 ```
 
 ## Use Case Highlights
+
+### 🚦 Basic Routing
+**Fundamental Gateway API concepts**
+- Path-based routing with HTTPRoute
+- Single Gateway with multiple routes
+- Service discovery and load balancing
+
+### 🔄 Ingress to Gateway API Migration
+**Complete migration guide from legacy Ingress to Gateway API**
+- Automated conversion using `ingress2gateway` tool
+- Side-by-side comparison of Ingress vs Gateway API
+- Step-by-step migration process with validation
+- Production-ready migration patterns
 
 ### 🔀 Merged Gateway Mode
 **Multi-tenant gateway sharing with resource efficiency**
@@ -169,8 +187,10 @@ eg-sandbox/
 │   └── helm/
 │       └── values.yaml     # EnvoyGateway Helm configuration
 ├── use-cases/              # Practical demonstrations
+│   ├── basic-routing/      # Basic Gateway API routing
+│   ├── ingress-migration/  # Ingress to Gateway API migration guide
 │   ├── merged-gateway/     # Multi-tenant gateway sharing
-│   ├── backend-mtls/       # Backend mTLS authentication  
+│   ├── backend-mtls/       # Backend mTLS authentication
 │   ├── active-standby-hc/  # Health check with failover
 │   └── README.md           # Use cases overview
 ├── examples/               # Sample applications (httpbin, etc.)

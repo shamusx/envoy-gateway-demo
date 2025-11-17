@@ -39,6 +39,11 @@ install_macos() {
         echo "Installing helm..."
         brew install helm
     fi
+
+    if ! command_exists ingress2gateway; then
+        echo "Installing ingress2gateway..."
+        brew install kubernetes-sigs/ingress2gateway/ingress2gateway
+    fi
 }
 
 # Function to install on Linux
@@ -68,6 +73,24 @@ install_linux() {
     if ! command_exists helm; then
         echo "Installing helm..."
         curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+    fi
+
+    # Install ingress2gateway
+    if ! command_exists ingress2gateway; then
+        echo "Installing ingress2gateway..."
+        # Get latest version
+        INGRESS2GATEWAY_VERSION=$(curl -s https://api.github.com/repos/kubernetes-sigs/ingress2gateway/releases/latest | grep '"tag_name"' | sed -E 's/.*"v([^"]+)".*/\1/')
+        # For AMD64 / x86_64
+        if [ $(uname -m) = x86_64 ]; then
+            curl -Lo ingress2gateway.tar.gz "https://github.com/kubernetes-sigs/ingress2gateway/releases/download/v${INGRESS2GATEWAY_VERSION}/ingress2gateway_${INGRESS2GATEWAY_VERSION}_linux_amd64.tar.gz"
+        # For ARM64
+        elif [ $(uname -m) = aarch64 ]; then
+            curl -Lo ingress2gateway.tar.gz "https://github.com/kubernetes-sigs/ingress2gateway/releases/download/v${INGRESS2GATEWAY_VERSION}/ingress2gateway_${INGRESS2GATEWAY_VERSION}_linux_arm64.tar.gz"
+        fi
+        tar -xzf ingress2gateway.tar.gz ingress2gateway
+        chmod +x ingress2gateway
+        sudo mv ingress2gateway /usr/local/bin/ingress2gateway
+        rm -f ingress2gateway.tar.gz
     fi
 }
 
@@ -113,6 +136,12 @@ if command_exists helm; then
 else
     echo -e "${RED}❌ helm not found${NC}"
     exit 1
+fi
+
+if command_exists ingress2gateway; then
+    echo -e "${GREEN}✅ ingress2gateway: $(ingress2gateway version 2>/dev/null || echo 'installed')${NC}"
+else
+    echo -e "${YELLOW}⚠️  ingress2gateway not found. It's optional but recommended for Ingress migration.${NC}"
 fi
 
 # Check Docker
