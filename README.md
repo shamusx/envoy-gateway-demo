@@ -76,17 +76,26 @@ task deploy-all         # Deploy all use cases
 task test-all           # Test all use cases
 
 # Deploy individual use cases
+task deploy-basic-routing       # Basic Gateway and HTTPRoute with multiple paths
 task deploy-merged-gateway      # Multi-tenant gateway sharing
 task deploy-backend-mtls        # Backend mTLS authentication
 task deploy-active-standby-hc   # Health check with failover
 
 # Test individual use cases
+task test-basic-routing
 task test-merged-gateway
 task test-backend-mtls
 task test-active-standby-hc
 ```
 
 ## Use Case Highlights
+
+### 🚦 Basic Routing
+**Fundamental Gateway API concepts with path-based routing**
+- Single Gateway with HTTP listener
+- Multiple HTTPRoutes demonstrating different path patterns
+- Simple same-namespace routing configuration
+- Perfect starting point for learning Gateway API
 
 ### 🔀 Merged Gateway Mode
 **Multi-tenant gateway sharing with resource efficiency**
@@ -167,10 +176,12 @@ All component versions are centralized in [`versions.env`](./versions.env) for e
 eg-sandbox/
 ├── deployments/
 │   └── helm/
-│       └── values.yaml     # EnvoyGateway Helm configuration
+│       ├── values.yaml              # EnvoyGateway Helm configuration (cluster-wide)
+│       └── values-namespace-mode.yaml # EnvoyGateway Helm configuration (namespace-scoped)
 ├── use-cases/              # Practical demonstrations
+│   ├── basic-routing/      # Basic Gateway and HTTPRoute patterns
 │   ├── merged-gateway/     # Multi-tenant gateway sharing
-│   ├── backend-mtls/       # Backend mTLS authentication  
+│   ├── backend-mtls/       # Backend mTLS authentication
 │   ├── active-standby-hc/  # Health check with failover
 │   └── README.md           # Use cases overview
 ├── examples/               # Sample applications (httpbin, etc.)

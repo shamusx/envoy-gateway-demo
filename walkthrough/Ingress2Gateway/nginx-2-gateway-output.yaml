@@ -1,0 +1,47 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  annotations:
+    gateway.networking.k8s.io/generator: ingress2gateway-dev
+  name: nginx
+  namespace: retail
+spec:
+  gatewayClassName: nginx
+  listeners:
+  - hostname: storefront.ecommerce.io
+    name: storefront-ecommerce-io-http
+    port: 80
+    protocol: HTTP
+  - hostname: storefront.ecommerce.io
+    name: storefront-ecommerce-io-https
+    port: 443
+    protocol: HTTPS
+    tls:
+      certificateRefs:
+      - group: null
+        kind: null
+        name: storefront-tls
+status: {}
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  annotations:
+    gateway.networking.k8s.io/generator: ingress2gateway-dev
+  name: ingress-storefront-api-storefront-ecommerce-io
+  namespace: retail
+spec:
+  hostnames:
+  - storefront.ecommerce.io
+  parentRefs:
+  - name: nginx
+  rules:
+  - backendRefs:
+    - name: storefront-api
+      port: 80
+    matches:
+    - path:
+        type: PathPrefix
+        value: /
+status:
+  parents: []
