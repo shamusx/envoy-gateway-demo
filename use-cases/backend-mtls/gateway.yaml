@@ -1,27 +1,50 @@
+## Steps for setting up mTLS backend gateway < EG v1.7.0
+
+# ---
+# apiVersion: gateway.envoyproxy.io/v1alpha1
+# kind: EnvoyProxy
+# metadata:
+#   name: custom-proxy-mtls
+#   namespace: httpbin-tls
+# spec:
+#   backendTLS:
+#     clientCertificateRef: 
+#       kind: Secret
+#       name: envoygateway-client-cert
+#       namespace: httpbin-tls
+---
+# apiVersion: gateway.networking.k8s.io/v1
+# kind: GatewayClass
+# metadata:
+#   name: backend-mtls-gw
+# spec:
+#   controllerName: gateway.envoyproxy.io/gatewayclass-controller
+#   parametersRef:
+#     group: gateway.envoyproxy.io
+#     kind: EnvoyProxy
+#     name: custom-proxy-mtls
+#     namespace: httpbin-tls 
 ---
 apiVersion: gateway.envoyproxy.io/v1alpha1
-kind: EnvoyProxy
+kind: Backend
 metadata:
-  name: custom-proxy-mtls
+  name: backend-httpbin-tls
   namespace: httpbin-tls
 spec:
-  backendTLS:
-    clientCertificateRef: 
+  endpoints:
+  - fqdn:
+      hostname: httpbin-tls.httpbin-tls.svc.cluster.local
+      port: 8443
+  tls:
+    sni: httpbin-tls.httpbin-tls.svc.cluster.local
+    clientCertificateRef:
       kind: Secret
       name: envoygateway-client-cert
       namespace: httpbin-tls
----
-apiVersion: gateway.networking.k8s.io/v1
-kind: GatewayClass
-metadata:
-  name: backend-mtls-gw
-spec:
-  controllerName: gateway.envoyproxy.io/gatewayclass-controller
-  parametersRef:
-    group: gateway.envoyproxy.io
-    kind: EnvoyProxy
-    name: custom-proxy-mtls
-    namespace: httpbin-tls 
+    caCertificateRefs:
+    - group: ""
+      kind: Secret
+      name: envoygateway-client-cert
 ---
 apiVersion: gateway.networking.k8s.io/v1
 kind: Gateway
@@ -29,12 +52,7 @@ metadata:
   name: backend-mtls-gateway
   namespace: httpbin-tls
 spec:
-  # infrastructure:
-  #   parametersRef:
-  #     group: gateway.envoyproxy.io
-  #     kind: EnvoyProxy
-  #     name: custom-proxy-mtls
-  gatewayClassName: backend-mtls-gw
+  gatewayClassName: eg
   listeners:
   - name: http
     protocol: HTTP
@@ -58,6 +76,5 @@ spec:
         value: /
     backendRefs:
     - group: ""
-      kind: Service
-      name: httpbin-tls
-      port: 8443
+      kind: Backend
+      name: backend-httpbin-tls

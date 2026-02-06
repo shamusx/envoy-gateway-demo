@@ -113,6 +113,7 @@ tasks:
       - task: deploy-merged-gateway
       - task: deploy-backend-mtls
       - task: deploy-active-standby-hc
+      - task: deploy-redirect-ssl-wildcard
 
   deploy-basic-routing:
     desc: Deploy Basic Routing use case
@@ -162,6 +163,18 @@ tasks:
     status:
       - test -f .task/deploy-active-standby-hc.done
 
+  deploy-redirect-ssl-wildcard:
+    desc: Deploy HTTP-to-HTTPS Redirect with Wildcard SSL use case
+    dir: use-cases/redirect-ssl-wildcard
+    cmds:
+      - ./deploy.sh
+      - mkdir -p ../../.task
+      - touch ../../.task/deploy-redirect-ssl-wildcard.done
+    generates:
+      - .task/deploy-redirect-ssl-wildcard.done
+    status:
+      - test -f .task/deploy-redirect-ssl-wildcard.done
+
   # Testing tasks
   test-all:
     desc: Test all deployed use cases
@@ -170,6 +183,7 @@ tasks:
       - task: test-merged-gateway
       - task: test-backend-mtls
       - task: test-active-standby-hc
+      - task: test-redirect-ssl-wildcard
 
   test-basic-routing:
     desc: Test Basic Routing use case
@@ -192,6 +206,12 @@ tasks:
   test-active-standby-hc:
     desc: Test Active-Standby Health Check use case
     dir: use-cases/active-standby-hc
+    cmds:
+      - ./test.sh
+
+  test-redirect-ssl-wildcard:
+    desc: Test HTTP-to-HTTPS Redirect with Wildcard SSL use case
+    dir: use-cases/redirect-ssl-wildcard
     cmds:
       - ./test.sh
 
@@ -234,6 +254,7 @@ tasks:
       - task: clean-merged-gateway
       - task: clean-backend-mtls
       - task: clean-active-standby-hc
+      - task: clean-redirect-ssl-wildcard
 
   clean-basic-routing:
     desc: Clean up Basic Routing use case
@@ -254,6 +275,11 @@ tasks:
     desc: Clean up Active-Standby Health Check use case
     cmds:
       - kubectl delete -f use-cases/active-standby-hc/ --ignore-not-found=true
+
+  clean-redirect-ssl-wildcard:
+    desc: Clean up HTTP-to-HTTPS Redirect with Wildcard SSL use case
+    cmds:
+      - kubectl delete -f use-cases/redirect-ssl-wildcard/ --ignore-not-found=true
 
   # Default task - shows tasks in logical order
   default:

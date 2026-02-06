@@ -1,0 +1,23 @@
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  namespace: httpbin
+  name: web-httpbin-io
+spec:
+  parentRefs:
+    - name: httpbin-wildcard
+      sectionName: https-httpbin
+  hostnames:
+    - "web.httpbin.io"
+  rules:
+    - backendRefs:
+        - group: ""
+          kind: Service
+          name: httpbin
+          port: 8000
+          weight: 1
+      matches:
+        - path:
+            type: PathPrefix
+            value: /

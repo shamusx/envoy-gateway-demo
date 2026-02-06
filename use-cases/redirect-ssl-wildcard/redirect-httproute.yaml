@@ -1,0 +1,15 @@
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  namespace: httpbin
+  name: httpbin-wildcard-redirect
+spec:
+  parentRefs:
+    - name: httpbin-wildcard
+      sectionName: http
+  rules:
+    - filters:
+        - type: RequestRedirect
+          requestRedirect:
+            scheme: https
+            port: 8443

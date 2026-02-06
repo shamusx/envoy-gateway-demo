@@ -10,7 +10,7 @@ git clone <repo-url>
 cd eg-sandbox
 
 # Complete setup with all use cases (recommended)
-task setup-all          # Setup Kind cluster + EnvoyGateway + all use cases
+task setup-all          # Setup Kind cluster + EnvoyGateway
 
 # Or step-by-step setup
 task setup              # Interactive setup - choose Kind or existing K8s
@@ -80,12 +80,14 @@ task deploy-basic-routing       # Basic Gateway and HTTPRoute with multiple path
 task deploy-merged-gateway      # Multi-tenant gateway sharing
 task deploy-backend-mtls        # Backend mTLS authentication
 task deploy-active-standby-hc   # Health check with failover
+task deploy-redirect-ssl-wildcard # HTTP-to-HTTPS redirect with wildcard SSL
 
 # Test individual use cases
 task test-basic-routing
 task test-merged-gateway
 task test-backend-mtls
 task test-active-standby-hc
+task test-redirect-ssl-wildcard
 ```
 
 ## Use Case Highlights
@@ -114,6 +116,13 @@ task test-active-standby-hc
 - Continuous health monitoring of external backends
 - Automatic traffic switching on backend failures
 - Backend API with external endpoint configuration
+
+### 🔄 HTTP-to-HTTPS Redirect with Wildcard SSL
+**Automatic HTTPS enforcement with wildcard certificate management**
+- Wildcard TLS certificates covering multiple domains
+- Automatic HTTP-to-HTTPS redirect via HTTPRoute filter
+- Multiple HTTPS listeners on a shared gateway
+- Merged gateway mode for resource-efficient multi-domain hosting
 
 ## Configuration
 
@@ -183,6 +192,7 @@ eg-sandbox/
 │   ├── merged-gateway/     # Multi-tenant gateway sharing
 │   ├── backend-mtls/       # Backend mTLS authentication
 │   ├── active-standby-hc/  # Health check with failover
+│   ├── redirect-ssl-wildcard/ # HTTP-to-HTTPS redirect with wildcard SSL
 │   └── README.md           # Use cases overview
 ├── examples/               # Sample applications (httpbin, etc.)
 ├── scripts/                # Automation and setup scripts
