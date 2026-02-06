@@ -1,0 +1,183 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  validate-release:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.get_version.outputs.version }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Release version: ${VERSION}"
+
+      - name: Validate version format
+        run: |
+          VERSION="${{ steps.get_version.outputs.version }}"
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9]+)?$ ]]; then
+            echo "Error: Invalid version format. Expected: vX.Y.Z or vX.Y.Z-suffix"
+            exit 1
+          fi
+
+  test-release:
+    needs: validate-release
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install Task
+        run: |
+          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Run complete test suite
+        run: |
+          task setup-all
+          task deploy-all
+          task test-all
+
+      - name: Cleanup
+        if: always()
+        run: |
+          task cleanup || true
+
+  create-release:
+    needs: [validate-release, test-release]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          
+          cat > CHANGELOG.md << EOF
+          # Release ${VERSION}
+          
+          ## What's Changed
+          
+          ### Features
+          - Merged Gateway Mode use case
+          - Backend mTLS configuration
+          - Active-Standby Health Check setup
+          
+          ### Components
+          - EnvoyGateway: ${ENVOY_GATEWAY_VERSION:-v1.5.0-rc.2}
+          - Gateway API: ${GATEWAY_API_VERSION:-v1.0.0}
+          - cert-manager: ${CERT_MANAGER_VERSION:-v1.18.2}
+          - Kubernetes: ${KUBERNETES_VERSION:-v1.28.0}
+          
+          ### Installation
+          \`\`\`bash
+          # Clone the repository
+          git clone https://github.com/${{ github.repository }}.git
+          cd $(basename ${{ github.repository }})
+          git checkout ${VERSION}
+          
+          # Run setup
+          task setup-all
+          \`\`\`
+          
+          ### Testing
+          \`\`\`bash
+          # Deploy all use cases
+          task deploy-all
+          
+          # Run tests
+          task test-all
+          \`\`\`
+          
+          EOF
+
+      - name: Create release artifacts
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          
+          # Create release directory
+          mkdir -p release
+          
+          # Package use cases
+          tar -czf release/use-cases-${VERSION}.tar.gz use-cases/
+          
+          # Package scripts
+          tar -czf release/scripts-${VERSION}.tar.gz scripts/
+          
+          # Package configs
+          tar -czf release/configs-${VERSION}.tar.gz configs/
+          
+          # Create checksums
+          cd release
+          sha256sum *.tar.gz > checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.validate-release.outputs.version }}
+          name: Release ${{ needs.validate-release.outputs.version }}
+          body_path: CHANGELOG.md
+          draft: false
+          prerelease: ${{ contains(needs.validate-release.outputs.version, '-') }}
+          files: |
+            release/*.tar.gz
+            release/checksums.txt
+
+  update-documentation:
+    needs: [validate-release, create-release]
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Update version references
+        run: |
+          VERSION="${{ needs.validate-release.outputs.version }}"
+          
+          # Update README with latest version
+          sed -i "s/Latest Release: .*/Latest Release: ${VERSION}/" README.md || true
+          
+          # Update installation instructions
+          sed -i "s/git checkout .*/git checkout ${VERSION}/" README.md || true
+
+      - name: Create PR for documentation updates
+        uses: peter-evans/create-pull-request@v6
+        with:
+          title: "docs: Update documentation for ${{ needs.validate-release.outputs.version }}"
+          body: |
+            This PR updates the documentation for release ${{ needs.validate-release.outputs.version }}
+            
+            - Updated version references in README
+            - Updated installation instructions
+          branch: update-docs-${{ needs.validate-release.outputs.version }}
+          commit-message: "docs: Update for release ${{ needs.validate-release.outputs.version }}"

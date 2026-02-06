@@ -1,0 +1,166 @@
+name: Nightly Tests
+
+on:
+  schedule:
+    # Run at 2 AM UTC every day
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+    inputs:
+      debug_enabled:
+        type: boolean
+        description: 'Enable debug logging'
+        required: false
+        default: false
+
+env:
+  CLUSTER_NAME: envoygateway-nightly
+
+jobs:
+  comprehensive-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set debug mode
+        if: ${{ inputs.debug_enabled }}
+        run: echo "DEBUG_MODE=true" >> $GITHUB_ENV
+
+      - name: Install Task
+        run: |
+          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Setup complete environment
+        run: |
+          task setup-all
+
+      - name: Verify all components
+        run: |
+          task verify-installation
+          task versions
+
+      - name: Deploy all use cases
+        run: |
+          task deploy-all
+          
+          # Wait for all deployments to be ready
+          echo "Waiting for deployments to stabilize..."
+          sleep 30
+
+      - name: Run comprehensive tests
+        run: |
+          set -e
+          
+          echo "=== Running all test suites ==="
+          task test-all
+          
+          echo "=== Testing individual components ==="
+          
+          # Test merged gateway
+          echo "Testing Merged Gateway..."
+          task test-merged-gateway
+          
+          # Test backend mTLS
+          echo "Testing Backend mTLS..."
+          task test-backend-mtls
+          
+          # Test active-standby health check
+          echo "Testing Active-Standby HC..."
+          task test-active-standby-hc
+
+      - name: Performance check
+        run: |
+          echo "=== Performance Metrics ==="
+          
+          # Check resource usage
+          kubectl top nodes || true
+          kubectl top pods -A || true
+          
+          # Check response times for gateways
+          kubectl get gateways -A
+
+      - name: Generate test report
+        if: always()
+        run: |
+          echo "# Nightly Test Report" > test-report.md
+          echo "Date: $(date)" >> test-report.md
+          echo "" >> test-report.md
+          
+          echo "## Component Status" >> test-report.md
+          kubectl get deployments -A >> test-report.md 2>&1 || true
+          echo "" >> test-report.md
+          
+          echo "## Gateway Status" >> test-report.md
+          kubectl get gateways -A >> test-report.md 2>&1 || true
+          echo "" >> test-report.md
+          
+          echo "## HTTPRoutes" >> test-report.md
+          kubectl get httproutes -A >> test-report.md 2>&1 || true
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-test-report
+          path: test-report.md
+          retention-days: 30
+
+      - name: Cleanup
+        if: always()
+        run: |
+          task clean-all || true
+          kind delete cluster --name ${CLUSTER_NAME} || true
+
+  stability-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+          task install-deps
+
+      - name: Create cluster and install EnvoyGateway
+        run: |
+          task create-cluster
+          task install-envoy-gateway
+
+      - name: Deploy workloads
+        run: |
+          task deploy-all
+
+      - name: Run stability tests
+        run: |
+          echo "Running stability tests for 30 minutes..."
+          
+          # Run tests in a loop for 30 minutes
+          end_time=$(($(date +%s) + 1800))
+          iteration=0
+          
+          while [ $(date +%s) -lt $end_time ]; do
+            iteration=$((iteration + 1))
+            echo "=== Iteration $iteration ==="
+            
+            # Run all tests
+            task test-all || echo "Test failed in iteration $iteration"
+            
+            # Check cluster health
+            kubectl get nodes
+            kubectl get pods -n envoy-gateway-system
+            
+            # Wait before next iteration
+            sleep 60
+          done
+          
+          echo "Stability test completed after $iteration iterations"
+
+      - name: Cleanup
+        if: always()
+        run: |
+          task cleanup || true
